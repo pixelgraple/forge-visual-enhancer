@@ -31,6 +31,16 @@ def _mode_change(mode):
     return gr.update(visible=mode == "Quick settings"), gr.update(visible=mode == "Visual Enhancer preset")
 
 
+def _setup_controls():
+    message, retry_visible, poll_active = bootstrap.setup_view()
+    return message, gr.update(visible=retry_visible), gr.update(active=poll_active)
+
+
+def _retry_setup():
+    bootstrap.start_setup()
+    return _setup_controls()
+
+
 class Script(scripts.Script):
     def title(self):
         return "Visual Enhancer (DLSS 5)"
@@ -44,9 +54,13 @@ class Script(scripts.Script):
                         "Needs an installed Visual Enhancer and a compatible GPU. Errors keep the original image.")
             gr.Markdown("Visual Enhancer by Merserk. Enhanced images include attribution and the license key in their metadata. "
                         "Forge image metadata must be enabled; use PNG, JPEG, or WebP for images and saved grids.")
-            setup_status = gr.Markdown(value=bootstrap.setup_message, every=3)
-            retry_setup = gr.Button("Retry setup", size="sm", variant="secondary")
-            retry_setup.click(bootstrap.start_setup, inputs=None, outputs=setup_status, show_progress="hidden")
+            setup_message, retry_visible, _ = bootstrap.setup_view()
+            setup_status = gr.Markdown(value=setup_message)
+            retry_setup = gr.Button("Retry setup", size="sm", variant="secondary", visible=retry_visible)
+            # One initial check per tab, then poll only while setup is running.
+            setup_timer = gr.Timer(value=3, active=True)
+            setup_timer.tick(_setup_controls, inputs=None, outputs=[setup_status, retry_setup, setup_timer], show_progress="hidden")
+            retry_setup.click(_retry_setup, inputs=None, outputs=[setup_status, retry_setup, setup_timer], show_progress="hidden")
             with gr.Accordion("Installed ReShade shader folders", open=False):
                 gr.Markdown("Use these folders in the Visual Enhancer desktop app. In Forge, they are added to ReShade preset search paths automatically.")
                 gr.Textbox(value=str(bootstrap.SHADER_PACK / "Shaders"), label="Shader folder", interactive=False, show_copy_button=True)
@@ -110,10 +124,11 @@ class Script(scripts.Script):
                 preset = engine.parse_preset(preset_json)
             else:
                 raise ValueError("Choose a valid Visual Enhancer settings mode.")
-            from modules.call_queue import queue_lock
-            with engine.gpu_lock_if_needed(queue_lock):
-                enhanced = engine.render(pp.image, preset,
-                    interrupted=lambda: bool(getattr(shared.state, "interrupted", False)))
+            # Forge holds its generation queue around this callback. It may
+            # run the callback on a different thread from the lock owner, so
+            # trying to reacquire the non-reentrant queue would deadlock.
+            enhanced = engine.render(pp.image, preset,
+                interrupted=lambda: bool(getattr(shared.state, "interrupted", False)))
             index = getattr(pp, "index", getattr(p, "batch_index", 0) + getattr(p, "iteration", 0) * getattr(p, "batch_size", 1))
             attribution.mark_processed(p, enhanced, index, mode)
             pp.image = enhanced

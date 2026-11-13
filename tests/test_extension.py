@@ -87,17 +87,6 @@ class EngineTests(unittest.TestCase):
             preset["settings"]["image_enabled_stages"].remove("reshade")
             self.assertIs(engine.with_standard_shaders(preset, pack), preset)
 
-    def test_shared_lock_is_not_reacquired_when_current_thread_owns_it(self):
-        class Lock:
-            def __init__(self, held): self._thread_state = types.SimpleNamespace(lock_fd=1 if held else None); self.calls = []
-            def __enter__(self): self.calls.append("acquire")
-            def __exit__(self, *args): self.calls.append("release")
-        held, free = Lock(True), Lock(False)
-        with engine.gpu_lock_if_needed(held): pass
-        with engine.gpu_lock_if_needed(free): pass
-        self.assertEqual(held.calls, [])
-        self.assertEqual(free.calls, ["acquire", "release"])
-
     def test_real_cli_dry_run(self):
         path = Path(os.environ.get("VISUAL_ENHANCER_TEST_EXE", ""))
         if not path.is_file(): self.skipTest("Optional local v20 installation not present")
@@ -119,6 +108,58 @@ class IntegrationTests(unittest.TestCase):
                 components = self.script.ui(tab)
             self.assertEqual(len(components), 22)
             self.assertGreater(len(demo.config["dependencies"]), 0)
+
+    def test_setup_controls_hide_retry_and_stop_polling_when_ready(self):
+        with patch.object(self.mod.bootstrap, "setup_view", return_value=("Ready", False, False)):
+            message, retry, timer = self.mod._setup_controls()
+        self.assertEqual(message, "Ready")
+        self.assertFalse(retry["visible"])
+        self.assertFalse(timer["active"])
+
+    def test_retry_restarts_polling_only_while_setup_is_running(self):
+        with patch.object(self.mod.bootstrap, "start_setup") as start, \
+             patch.object(self.mod.bootstrap, "setup_view", return_value=("Downloading", False, True)):
+            message, retry, timer = self.mod._retry_setup()
+        start.assert_called_once()
+        self.assertEqual(message, "Downloading")
+        self.assertFalse(retry["visible"])
+        self.assertTrue(timer["active"])
+
+    def test_generation_callback_does_not_reacquire_queue_held_by_caller_thread(self):
+        class ThreadLocalQueue:
+            def __init__(self):
+                self.local_lock = threading.Lock()
+                self._thread_state = threading.local()
+            def __enter__(self):
+                self.local_lock.acquire()
+                self._thread_state.lock_fd = object()
+                return self
+            def __exit__(self, *args):
+                self._thread_state.lock_fd = None
+                self.local_lock.release()
+
+        queue = ThreadLocalQueue()
+        self.fake["modules.call_queue"].queue_lock = queue
+        completed = threading.Event()
+        errors = []
+        def finish_image():
+            try:
+                self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                completed.set()
+
+        with patch.dict(sys.modules, self.fake), patch.object(engine, "render", return_value=Image.new("RGB", (64, 64), "red")):
+            with queue:
+                worker = threading.Thread(target=finish_image, daemon=True)
+                worker.start()
+                completed_while_owner_held_lock = completed.wait(timeout=1.0)
+            worker.join(timeout=3.0)
+        self.assertFalse(errors)
+        self.assertFalse(worker.is_alive(), "The test worker did not finish after queue release")
+        self.assertTrue(completed_while_owner_held_lock, "The callback attempted to reacquire the caller's GPU queue")
+        self.assertEqual(self.pp.image.getpixel((0, 0)), (255, 0, 0))
 
     def test_disabled_does_nothing_and_success_replaces_each_image(self):
         with patch.dict(sys.modules, self.fake), patch.object(engine, "render", return_value=Image.new("RGB", (64, 64), "red")) as render:

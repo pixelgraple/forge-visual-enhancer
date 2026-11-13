@@ -1,7 +1,6 @@
 """Run the official Visual Enhancer CLI on one Forge image, without shell commands."""
 from __future__ import annotations
 
-import contextlib
 import copy
 import json
 import os
@@ -115,19 +114,6 @@ def quick_preset(neural, style, strength, passes, tone, structure, skin, mask,
     }
     return {"format": PRESET_FORMAT, "schema_version": 43,
             "name": "Forge Visual Enhancer", "settings": settings}
-
-
-@contextlib.contextmanager
-def gpu_lock_if_needed(lock):
-    # The user's patched Forge locks the complete generation, including this
-    # callback. Reacquiring that non-reentrant lock would deadlock a batch.
-    # Generic Forge owns its own generation lock around the callback.
-    state = getattr(lock, "_thread_state", None)
-    if state is None or getattr(state, "lock_fd", None) is not None:
-        yield
-    else:
-        with lock:
-            yield
 
 
 def _stop_child(proc):

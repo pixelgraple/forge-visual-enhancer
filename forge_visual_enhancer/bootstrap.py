@@ -287,22 +287,32 @@ def _worker() -> None:
             print("[Forge Visual Enhancer] Setup error:", str(exc), flush=True)
 
 
-def setup_message() -> str:
+def setup_view() -> tuple[str, bool, bool]:
+    """Return status text, retry visibility, and whether to keep polling."""
     try:
         data = json.loads(STATUS.read_text(encoding="utf-8")) if STATUS.is_file() else {}
-        if _configured_cli() is not None and shader_pack_ready():
+        cli_ready = _configured_cli() is not None
+        shaders_ready = shader_pack_ready()
+        if cli_ready and shaders_ready:
             message = str(data.get("message", "Visual Enhancer is ready.")) if data.get("phase") == "ready" else "Visual Enhancer is ready."
-            return "**Setup:** " + message[:500]
+            return "**Setup:** " + message[:500], False, False
         message = str(data.get("message", "Setup has not started."))[:500]
         phase = data.get("phase")
-        if phase == "ready" and not shader_pack_ready():
-            return "**Setup:** ReShade shaders are not installed. Use Retry setup."
+        if phase == "ready" and not cli_ready:
+            return "**Setup:** Visual Enhancer is not installed or cannot be found. Use Retry setup.", True, False
+        if phase == "ready" and not shaders_ready:
+            return "**Setup:** ReShade shaders are not installed. Use Retry setup.", True, False
         if phase in {"downloading", "extracting", "verifying", "starting"} and time.time() - float(data.get("updated", 0)) > 900:
-            return "**Setup stopped before finishing.** Use Retry setup."
+            return "**Setup stopped before finishing.** Use Retry setup.", True, False
         progress = f" {int(data['percent'])}%" if isinstance(data.get("percent"), int) and phase in {"downloading", "extracting"} else ""
-        return f"**Setup:** {message}{progress}"
+        working = phase in {"downloading", "extracting", "verifying", "starting"}
+        return f"**Setup:** {message}{progress}", not working, working
     except Exception as exc:
-        return "**Setup needs attention:** " + str(exc)[:400]
+        return "**Setup needs attention:** " + str(exc)[:400], True, False
+
+
+def setup_message() -> str:
+    return setup_view()[0]
 
 
 def start_setup() -> str:

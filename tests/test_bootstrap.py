@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest.mock import patch
@@ -161,6 +162,43 @@ class BootstrapTests(unittest.TestCase):
             message = bootstrap.start_setup()
         self.assertEqual(spawn.call_count, 1)
         self.assertIn("Preparing", message)
+
+    def test_setup_view_stops_polling_when_ready(self):
+        fake_cli = self.root / "existing" / "VE_CLI.exe"
+        bootstrap._status("ready", "Visual Enhancer is ready. Standard ReShade shaders are ready.")
+        with patch.object(bootstrap, "_configured_cli", return_value=fake_cli):
+            message, retry_visible, poll_active = bootstrap.setup_view()
+        self.assertIn("ready", message)
+        self.assertFalse(retry_visible)
+        self.assertFalse(poll_active)
+
+    def test_setup_view_does_not_claim_ready_when_app_is_missing(self):
+        bootstrap._status("ready", "Visual Enhancer is ready.")
+        with patch.object(bootstrap, "_configured_cli", return_value=None):
+            message, retry_visible, poll_active = bootstrap.setup_view()
+        self.assertIn("not installed", message)
+        self.assertTrue(retry_visible)
+        self.assertFalse(poll_active)
+
+    def test_setup_view_polls_only_while_working_and_allows_retry_on_failure(self):
+        with patch.object(bootstrap, "_configured_cli", return_value=None):
+            bootstrap._status("downloading", "Downloading the official release.", 34)
+            message, retry_visible, poll_active = bootstrap.setup_view()
+            self.assertIn("34%", message)
+            self.assertFalse(retry_visible)
+            self.assertTrue(poll_active)
+
+            bootstrap._status("error", "A download failed.")
+            message, retry_visible, poll_active = bootstrap.setup_view()
+            self.assertIn("failed", message)
+            self.assertTrue(retry_visible)
+            self.assertFalse(poll_active)
+
+            bootstrap._atomic_json(self.setup / "status.json", {"phase": "starting", "updated": time.time() - 901})
+            message, retry_visible, poll_active = bootstrap.setup_view()
+            self.assertIn("stopped", message)
+            self.assertTrue(retry_visible)
+            self.assertFalse(poll_active)
 
 
 if __name__ == "__main__":
