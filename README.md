@@ -35,13 +35,14 @@ it does not relicense Visual Enhancer or its dependencies. The application is
 an independent project and is not affiliated with or endorsed by NVIDIA.
 
 Each image successfully processed by this extension receives the Visual
-Enhancer and Merserk credit in its generation metadata. To avoid producing
-enhanced images without that credit, Forge's **Write infotext to metadata of
-generated images** setting must be enabled and image format must be PNG, JPEG,
-or WebP. If saved grids are enabled, their format must also be PNG, JPEG, or
-WebP. If these settings cannot preserve attribution, the extension keeps the
-original image and reports the reason. Private license keys are never added
-to image metadata or this repository.
+Enhancer and Merserk credit and the distribution license key in its generation
+metadata. The key is included with this public extension and is readable from
+processed images. To avoid producing enhanced images without that metadata,
+Forge's **Write infotext to metadata of generated images** setting must be
+enabled and image format must be PNG, JPEG, or WebP. If saved grids are enabled,
+their format must also be PNG, JPEG, or WebP. If these settings cannot preserve
+the required metadata, the extension keeps the original image and reports the
+reason.
 
 Setup also downloads the pinned standard ReShade shader collection from its
 official upstream repository, verifies its SHA-256, and keeps its original

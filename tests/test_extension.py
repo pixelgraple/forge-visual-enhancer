@@ -128,9 +128,13 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(self.pp.image.getpixel((0, 0)), (255, 0, 0))
             self.assertIn("Visual Enhancer", self.p.extra_generation_params)
             self.assertEqual(self.pp.image.info[attribution.FIELD], attribution.CREDIT)
+            self.assertEqual(self.pp.image.info[attribution.LICENSE_FIELD], attribution.LICENSE_KEY)
+            self.assertEqual(attribution.LICENSE_KEY, "758-cc-n4Ha")
             info = self.p.extra_generation_params["Visual Enhancer"]
             self.assertIn(attribution.CREDIT, info(p=self.p, index=0))
+            self.assertIn(attribution.LICENSE_KEY, info(p=self.p, index=0))
             self.assertIn(attribution.CREDIT, info(p=self.p, index=0, use_main_prompt=True))
+            self.assertIn(attribution.LICENSE_KEY, info(p=self.p, index=0, use_main_prompt=True))
             self.assertIn(attribution.CREDIT, json.dumps(self.p.extra_generation_params))
             self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
             self.assertEqual(render.call_count, 2)
@@ -159,16 +163,20 @@ class IntegrationTests(unittest.TestCase):
             self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
         credit = self.p.extra_generation_params["Visual Enhancer"]
         self.assertIn(attribution.CREDIT, credit(p=self.p, index=0))
+        self.assertIn(attribution.LICENSE_KEY, credit(p=self.p, index=0))
         self.assertIsNone(credit(p=self.p, index=1))
         self.assertIn(attribution.CREDIT, credit(p=self.p, index=0, use_main_prompt=True))
+        self.assertIn(attribution.LICENSE_KEY, credit(p=self.p, index=0, use_main_prompt=True))
         self.assertIs(self.pp.image, self.image)
         params = types.SimpleNamespace(image=successful, pnginfo={"parameters": "original prompt"})
         attribution.before_image_saved(params)
         self.assertEqual(params.pnginfo[attribution.FIELD], attribution.CREDIT)
+        self.assertEqual(params.pnginfo[attribution.LICENSE_FIELD], attribution.LICENSE_KEY)
         self.assertEqual(params.pnginfo["parameters"], "original prompt")
         params = types.SimpleNamespace(image=self.image, pnginfo={})
         attribution.before_image_saved(params)
         self.assertNotIn(attribution.FIELD, params.pnginfo)
+        self.assertNotIn(attribution.LICENSE_FIELD, params.pnginfo)
 
     def test_later_batch_uses_global_image_indexes(self):
         self.p.batch_size = 2

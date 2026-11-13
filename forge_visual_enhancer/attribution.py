@@ -4,7 +4,10 @@ from . import bootstrap
 
 
 FIELD = "Visual Enhancer Attribution"
+LICENSE_FIELD = "Visual Enhancer License Key"
+LICENSE_KEY = "758-cc-n4Ha"
 CREDIT = "Visual Enhancer by Merserk; official download: " + bootstrap.RELEASE_URL
+STAMP = CREDIT + "; License key: " + LICENSE_KEY
 SUPPORTED_FORMATS = frozenset(("png", "jpg", "jpeg", "webp"))
 
 
@@ -28,16 +31,16 @@ class _PerImageCredit(str):
     """
 
     def __new__(cls, processed):
-        result = super().__new__(cls, CREDIT)
+        result = super().__new__(cls, STAMP)
         result.processed = processed
         return result
 
     def __call__(self, p=None, index=0, use_main_prompt=False, **_):
         if use_main_prompt:
-            return "Contains images enhanced with " + CREDIT if self.processed else None
+            return "Contains images enhanced with " + STAMP if self.processed else None
         image_index = int(getattr(p, "iteration", 0)) * int(getattr(p, "batch_size", 1)) + int(index or 0)
         mode = self.processed.get(image_index)
-        return "Applied (" + mode + "); " + CREDIT if mode is not None else None
+        return "Applied (" + mode + "); " + STAMP if mode is not None else None
 
 
 def mark_processed(p, image, index, mode):
@@ -49,9 +52,11 @@ def mark_processed(p, image, index, mode):
     processed[int(index)] = str(mode)
     p.extra_generation_params["Visual Enhancer"] = _PerImageCredit(processed)
     image.info[FIELD] = CREDIT
+    image.info[LICENSE_FIELD] = LICENSE_KEY
 
 
 def before_image_saved(params):
     """Keep a separate PNG text field as well as Forge's credited infotext."""
-    if params.image.info.get(FIELD) == CREDIT:
+    if params.image.info.get(FIELD) == CREDIT and params.image.info.get(LICENSE_FIELD) == LICENSE_KEY:
         params.pnginfo[FIELD] = CREDIT
+        params.pnginfo[LICENSE_FIELD] = LICENSE_KEY

@@ -42,7 +42,7 @@ class Script(scripts.Script):
         with gr.Accordion("Visual Enhancer (DLSS 5)", open=False):
             gr.Markdown("Small still-image enhancer · Runs after each finished image, before Forge saves it. "
                         "Needs an installed Visual Enhancer and a compatible GPU. Errors keep the original image.")
-            gr.Markdown("Visual Enhancer by Merserk. Enhanced images include attribution in their metadata. "
+            gr.Markdown("Visual Enhancer by Merserk. Enhanced images include attribution and the license key in their metadata. "
                         "Forge image metadata must be enabled; use PNG, JPEG, or WebP for images and saved grids.")
             setup_status = gr.Markdown(value=bootstrap.setup_message, every=3)
             retry_setup = gr.Button("Retry setup", size="sm", variant="secondary")

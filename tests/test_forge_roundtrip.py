@@ -69,29 +69,38 @@ class ForgeMetadataRoundTrip(unittest.TestCase):
         second = self.infotext(*args, index=1)
         grid = self.infotext(*args, use_main_prompt=True)
         self.assertIn(attribution.CREDIT, first)
+        self.assertIn(attribution.LICENSE_KEY, first)
         self.assertNotIn(attribution.CREDIT, second)
+        self.assertNotIn(attribution.LICENSE_KEY, second)
         self.assertIn(attribution.CREDIT, grid)
+        self.assertIn(attribution.LICENSE_KEY, grid)
 
     def test_saved_files_and_api_images_retain_credit_and_prompt(self):
-        prompt = "A test prompt\nSteps: 12, Visual Enhancer: " + attribution.CREDIT
-        for extension in ("png", "jpg", "webp"):
-            with self.subTest(extension=extension), tempfile.TemporaryDirectory() as folder:
+        prompt = "A test prompt\nSteps: 12, Visual Enhancer: " + attribution.STAMP
+        for extension, mode in (("png", "RGB"), ("png", "RGBA"), ("jpg", "RGB"),
+                                ("jpg", "RGBA"), ("webp", "RGB"), ("webp", "RGBA")):
+            with self.subTest(extension=extension, mode=mode), tempfile.TemporaryDirectory() as folder:
                 self.opts.samples_format = extension
-                image = Image.new("RGB", (16, 16), "#72a9ba")
+                image = Image.new(mode, (16, 16), "#72a9ba")
                 image.info["parameters"] = prompt
                 image.info[attribution.FIELD] = attribution.CREDIT
+                image.info[attribution.LICENSE_FIELD] = attribution.LICENSE_KEY
                 path = Path(folder) / ("image." + extension)
                 self.save(image, prompt, str(path), "." + extension,
-                          existing_pnginfo={attribution.FIELD: attribution.CREDIT})
+                          existing_pnginfo={attribution.FIELD: attribution.CREDIT,
+                                            attribution.LICENSE_FIELD: attribution.LICENSE_KEY})
                 with Image.open(path) as saved:
                     self.assertIn(attribution.CREDIT, read_prompt(saved, extension))
+                    self.assertIn(attribution.LICENSE_KEY, read_prompt(saved, extension))
                     self.assertIn("A test prompt", read_prompt(saved, extension))
                     if extension == "png":
                         self.assertEqual(saved.info[attribution.FIELD], attribution.CREDIT)
+                        self.assertEqual(saved.info[attribution.LICENSE_FIELD], attribution.LICENSE_KEY)
 
                 encoded = self.encode(image)
                 with Image.open(io.BytesIO(base64.b64decode(encoded))) as returned:
                     self.assertIn(attribution.CREDIT, read_prompt(returned, extension))
+                    self.assertIn(attribution.LICENSE_KEY, read_prompt(returned, extension))
                     self.assertIn("A test prompt", read_prompt(returned, extension))
 
 
