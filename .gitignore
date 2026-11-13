@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+config.json
+runtime/
+.setup/
+.venv/
+*.safetensors
+*.zip
+*.7z
+*.exe
+*.dll
