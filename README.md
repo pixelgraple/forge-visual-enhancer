@@ -5,11 +5,33 @@ Neo's txt2img and img2img screens. Each enabled still image is processed after
 compositing, before Forge saves and returns it. The original is retained if
 enhancement fails. The extension is disabled by default.
 
-## Installation through Forge
+## Quick install: paste the URL and click Install
 
-In Forge, open **Extensions → Install from URL**, enter the repository address,
-and choose **Install**. Apply and restart the Forge UI when prompted. Existing
-generation work should be allowed to finish before restarting.
+**Windows · Forge Neo / Forge Classic · compatible NVIDIA GPU · internet required**
+
+Paste this address into Forge's **Extensions → Install from URL**:
+
+```text
+https://github.com/pixelgraple/forge-visual-enhancer.git
+```
+
+1. Click **Install** once. Leave the optional directory and branch fields blank.
+   Visual Enhancer and the standard ReShade shaders are prepared automatically.
+2. When all generation jobs have finished, fully stop and relaunch Forge using
+   your usual launcher. This is Forge's normal extension-loading step; simply
+   refreshing the browser is not enough.
+3. Open **Visual Enhancer (DLSS 5)** under **txt2img** or **img2img**. Wait until
+   **Setup** says Visual Enhancer and the standard ReShade shaders are **ready**.
+4. Check **Enhance each image**, choose your settings, and generate as usual.
+
+There is no separate app installer, pip command, shader download, file copying,
+executable-path setup, or license-key entry on the normal installation path.
+The extension starts disabled so you choose when to add enhancement to a job.
+
+The first setup downloads approximately **904 MB**, plus a small shader pack,
+and needs additional space for the extracted application. Allow the download
+to finish; its time depends on your connection. Installing the GitHub extension
+finishes before this background download does.
 
 Forge executes this repository's `install.py` after cloning it. Setup reuses a
 complete existing Visual Enhancer installation when one is configured or found
@@ -17,8 +39,45 @@ in a common location. Otherwise, it downloads the original official v20.0
 Windows archive directly from its author, verifies SHA-256, and installs it
 inside this extension. The download is approximately 904 MB and the extracted
 application needs additional disk space. The download and extraction run in
-the background; the extension panel reports progress and can retry failures.
+the background; the extension panel reports progress. Status polling stops when
+setup is ready. **Retry setup** appears only when setup needs attention.
 No packaged Visual Enhancer binaries or model files are present in this repo.
+
+## Updating an existing installation
+
+Open **Extensions → Installed**, click **Check for updates**, and apply the
+update for **forge-visual-enhancer** using Forge's update controls. Wait for
+all generation work to finish before applying an update that restarts Forge.
+Then make sure the **Forge Python process has fully restarted**, using your
+usual launcher if needed. A browser refresh or a UI-only reload can retain
+the old Python code. Refresh the browser after Forge is back.
+
+Updates preserve the local runtime, shader pack, and `config.json`; a complete
+existing installation does not download the application again. If you run
+multiple Forge instances, update each extension copy and restart each instance
+when its queue is idle.
+
+The current update fixes the shared-queue lockup after generation and removes
+the repeated setup polling and unnecessary Retry button. See
+[the change notes](CHANGELOG.md).
+
+## If setup needs attention
+
+- **Downloading / preparing:** let setup finish. Keep Forge open and connected
+  to the internet. You do not need to keep clicking Install.
+- **Ready:** setup is complete. No Retry button is expected.
+- **Download failed:** check your connection to GitHub, then click **Retry setup**.
+  Setup checks the official download's SHA-256 before installing it.
+- **An existing configuration or folder is incomplete:** the status explains
+  what needs attention. Existing user files are preserved; retrying will not
+  overwrite them. Repair the named installation/path first.
+- **The old panel is still showing:** finish active jobs, fully restart Forge,
+  and refresh its browser tab.
+
+Setup status and errors are recorded in
+`extensions/forge-visual-enhancer/.setup/status.json`. Worker details are in
+`.setup/install.log`; errors before the worker starts can also appear in
+Forge's console.
 
 ## Credits and attribution
 
@@ -53,6 +112,9 @@ The standard collection supplies five effects and associated include files; it
 does not automatically enable any effect. Different shader packs may have
 different licenses and compatibility requirements.
 
+**Standard ReShade shaders by crosire and contributors:**
+[upstream source and notices](https://github.com/crosire/reshade-shaders/tree/fd0022170615ce0d8162d219bff07232fa6dd84f).
+
 Windows and a compatible NVIDIA GPU are required for the GPU effects. The
 application's own license and requirements apply. To select a portable copy
 outside the common locations, set the environment variable
@@ -73,3 +135,11 @@ Forge's still-image output.
 On installations with the shared Forge GPU queue, enhancement stays within
 the existing generation lock; it does not re-enter the lock or restart another
 Forge process. Enhancement can take additional time and VRAM.
+
+## Installation verification for developers
+
+Run `python tests/smoke_fresh_install.py` with Forge's Python interpreter on
+Windows to test a clean installation in a temporary folder. This downloads the
+full official application and shaders, verifies readiness and CLI startup, and
+checks that a second install call reuses the completed setup. It does not run
+an image generation or modify a live Forge installation.
