@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import tempfile
 import time
 
 from PIL import Image
+from . import bootstrap
 
 ROOT = Path(__file__).resolve().parent.parent
 PRESET_FORMAT = "dlss5-visual-enhancer-settings-preset"
@@ -49,6 +51,31 @@ def parse_preset(raw):
     if not isinstance(enabled, list) or not enabled or not all(isinstance(x, str) for x in enabled):
         raise ValueError("The preset has no enabled image effects. Enable an effect before exporting it.")
     return preset
+
+
+def with_standard_shaders(preset, shader_pack=None):
+    """Add the standard pack as a search fallback without changing custom paths."""
+    settings = preset.get("settings", {}) if isinstance(preset, dict) else {}
+    if not isinstance(settings, dict) or not isinstance(settings.get("image_enabled_stages"), list) or "reshade" not in settings["image_enabled_stages"]:
+        return preset
+    pack = Path(shader_pack) if shader_pack is not None else bootstrap.SHADER_PACK
+    if not bootstrap.shader_pack_ready(pack):
+        return preset
+    result = copy.deepcopy(preset)
+    destination = result["settings"]
+    for name, folder in (("reshade_image_shader_search_paths", "Shaders"),
+                         ("reshade_image_texture_search_paths", "Textures")):
+        current = destination.get(name, "")
+        if current is None:
+            current = ""
+        if not isinstance(current, str):
+            continue
+        new_path = (pack / folder).resolve().as_posix()
+        existing = [p.strip() for p in current.split(";") if p.strip()]
+        if not any(os.path.normcase(p.replace("/", "\\")) == os.path.normcase(new_path.replace("/", "\\")) for p in existing):
+            existing.append(new_path)
+        destination[name] = ";".join(existing)
+    return result
 
 
 def quick_preset(neural, style, strength, passes, tone, structure, skin, mask,
@@ -122,7 +149,7 @@ def render(image, preset, executable=None, interrupted=lambda: False, timeout=60
         folder = Path(work)
         source, target, spec = folder / "input.png", folder / "output.png", folder / "preset.json"
         image.save(source, format="PNG")
-        spec.write_text(json.dumps(preset, ensure_ascii=False), encoding="utf-8")
+        spec.write_text(json.dumps(with_standard_shaders(preset), ensure_ascii=False), encoding="utf-8")
         args = [str(exe), "render", str(source), "--preset", str(spec), "-o", str(target),
                 "--format", "png", "--json", "--quiet"]
         if dry_run:

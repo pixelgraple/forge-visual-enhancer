@@ -25,6 +25,15 @@ application needs additional disk space. The download and extraction run in
 the background; the extension panel reports progress and can retry failures.
 No packaged Visual Enhancer binaries or model files are present in this repo.
 
+Setup also downloads the pinned standard ReShade shader collection from its
+official upstream repository, verifies its SHA-256, and keeps its original
+files and notices under `runtime/reshade-standard`. Existing shader folders are
+never overwritten. Both `Shaders` and `Textures` are added as fallback search
+paths for enabled ReShade image presets, while custom search paths are retained.
+The standard collection supplies five effects and associated include files; it
+does not automatically enable any effect. Different shader packs may have
+different licenses and compatibility requirements.
+
 Windows and a compatible NVIDIA GPU are required for the GPU effects. The
 application's own license and requirements apply. To select a portable copy
 outside the common locations, set the environment variable

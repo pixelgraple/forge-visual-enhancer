@@ -41,4 +41,7 @@ with tempfile.TemporaryDirectory(prefix="forge-ve-hook-check-") as temporary:
     config = json.loads((checkout / "config.json").read_text(encoding="utf-8"))
     assert Path(config["visual_enhancer_exe"]) == app / "VE_CLI.exe"
     assert (app / "VE_CLI.exe").read_bytes() == b"fake cli for setup test"
-    print("PASS Forge hook returned promptly and background setup reused an existing complete app")
+    shader_root = checkout / "runtime" / "reshade-standard"
+    assert len(list((shader_root / "Shaders").glob("*.fx"))) == 5
+    assert (shader_root / "Textures").is_dir()
+    print("PASS Forge hook returned promptly, reused the app, and installed the official shaders")

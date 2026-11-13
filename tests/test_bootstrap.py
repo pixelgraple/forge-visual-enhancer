@@ -21,13 +21,18 @@ class BootstrapTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.setup = self.root / ".setup"
         self.runtime = self.root / "runtime" / "Visual-Enhancer"
+        self.shaders = self.root / "runtime" / "reshade-standard"
         self.paths = patch.multiple(bootstrap, ROOT=self.root, SETUP=self.setup,
                                     STATUS=self.setup / "status.json", CONFIG=self.root / "config.json",
-                                    RUNTIME=self.runtime)
+                                    RUNTIME=self.runtime, SHADER_PACK=self.shaders)
         self.paths.start()
         self.env = patch.dict(os.environ, {}, clear=False)
         self.env.start()
         os.environ.pop("VISUAL_ENHANCER_EXE", None)
+        (self.shaders / "Shaders").mkdir(parents=True)
+        (self.shaders / "Textures").mkdir()
+        for name in ("Daltonize.fx", "Deband.fx", "DisplayDepth.fx", "LUT.fx", "UIMask.fx", "ReShade.fxh"):
+            (self.shaders / "Shaders" / name).write_text("fixture")
 
     def tearDown(self):
         self.env.stop()
@@ -113,6 +118,49 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(spawn.call_count, 1)
         self.assertIn("Preparing", message)
         self.assertEqual(spawn.call_args.args[0][-1], "--worker")
+
+    def test_shader_setup_downloads_and_preserves_existing_pack(self):
+        target = self.root / "other-shaders"
+        archive = self.root / "shader-fixture.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            prefix = "reshade-shaders-" + bootstrap.SHADER_COMMIT + "/"
+            for name in ("Daltonize.fx", "Deband.fx", "DisplayDepth.fx", "LUT.fx", "UIMask.fx", "ReShade.fxh"):
+                z.writestr(prefix + "Shaders/" + name, "fixture " + name)
+            z.writestr(prefix + "Textures/test.png", b"fixture texture")
+            z.writestr(prefix + "README.md", "upstream notices")
+        with patch.object(bootstrap, "SHADER_PACK", target), \
+             patch.object(bootstrap, "_download_shaders", side_effect=lambda out: out.write_bytes(archive.read_bytes())) as download:
+            bootstrap._ensure_shader_pack()
+            bootstrap._ensure_shader_pack()
+        self.assertEqual(download.call_count, 1)
+        self.assertTrue(bootstrap.shader_pack_ready(target))
+        self.assertEqual((target / "Textures" / "test.png").read_bytes(), b"fixture texture")
+        self.assertTrue((target / "README.md").is_file())
+
+    def test_incomplete_existing_shader_folder_is_not_overwritten(self):
+        target = self.root / "incomplete-shaders"
+        target.mkdir()
+        marker = target / "keep.fx"
+        marker.write_text("user data")
+        with patch.object(bootstrap, "SHADER_PACK", target), patch.object(bootstrap, "_download_shaders") as download:
+            with self.assertRaisesRegex(RuntimeError, "not overwritten"):
+                bootstrap._ensure_shader_pack()
+        download.assert_not_called()
+        self.assertEqual(marker.read_text(), "user data")
+
+    def test_shader_download_rejects_wrong_hash(self):
+        with patch.object(bootstrap.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong shader archive")):
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                bootstrap._download_shaders(self.root / "shader-download.zip", expected="0" * 64)
+
+    def test_existing_app_still_starts_missing_shader_setup(self):
+        fake_cli = self.root / "configured" / "VE_CLI.exe"
+        with patch.object(bootstrap, "_configured_cli", return_value=fake_cli), \
+             patch.object(bootstrap, "shader_pack_ready", return_value=False), \
+             patch.object(bootstrap.subprocess, "Popen", return_value=types.SimpleNamespace()) as spawn:
+            message = bootstrap.start_setup()
+        self.assertEqual(spawn.call_count, 1)
+        self.assertIn("Preparing", message)
 
 
 if __name__ == "__main__":

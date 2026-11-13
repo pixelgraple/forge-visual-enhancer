@@ -43,6 +43,10 @@ class Script(scripts.Script):
             setup_status = gr.Markdown(value=bootstrap.setup_message, every=3)
             retry_setup = gr.Button("Retry setup", size="sm", variant="secondary")
             retry_setup.click(bootstrap.start_setup, inputs=None, outputs=setup_status, show_progress="hidden")
+            with gr.Accordion("Installed ReShade shader folders", open=False):
+                gr.Markdown("Use these folders in the Visual Enhancer desktop app. In Forge, they are added to ReShade preset search paths automatically.")
+                gr.Textbox(value=str(bootstrap.SHADER_PACK / "Shaders"), label="Shader folder", interactive=False, show_copy_button=True)
+                gr.Textbox(value=str(bootstrap.SHADER_PACK / "Textures"), label="Texture folder", interactive=False, show_copy_button=True)
             enabled = gr.Checkbox(label="Enhance each image", value=False)
             mode = gr.Radio(["Quick settings", "Visual Enhancer preset"], value="Quick settings", label="Settings")
             with gr.Group(visible=True) as quick:
@@ -73,7 +77,8 @@ class Script(scripts.Script):
                         grain_size = gr.Slider(0.1, 10, value=1, step=0.1, label="Grain size")
             with gr.Group(visible=False) as advanced:
                 gr.Markdown("For the complete still-image pipeline and stage order, export a JSON settings preset "
-                            "from Visual Enhancer and upload it here. ReShade and LUT files referenced by the preset "
+                            "from Visual Enhancer and upload it here. Standard ReShade shaders are installed automatically "
+                            "and added to the shader search path. Custom ReShade and LUT files referenced by the preset "
                             "must remain available on this computer. Video-only effects are not used for Forge images.")
                 preset_file = gr.File(label="Visual Enhancer settings preset (.json)", file_types=[".json"], type="binary")
                 preset_status = gr.Markdown("No preset loaded.")

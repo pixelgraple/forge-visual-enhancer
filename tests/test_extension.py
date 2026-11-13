@@ -1,4 +1,5 @@
 import importlib.util
+import copy
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,30 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(engine.parse_preset(json.dumps(preset)), preset)
         preset["settings"]["image_enabled_stages"] = []
         with self.assertRaises(ValueError): engine.parse_preset(json.dumps(preset))
+
+    def test_standard_shader_paths_are_appended_without_modifying_custom_preset(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = Path(temporary)
+            shaders = pack / "Shaders"
+            textures = pack / "Textures"
+            shaders.mkdir()
+            textures.mkdir()
+            for name in ("Daltonize.fx", "Deband.fx", "DisplayDepth.fx", "LUT.fx", "UIMask.fx", "ReShade.fxh"):
+                (shaders / name).write_text("fixture")
+            preset = engine.quick_preset(*ARGS)
+            preset["settings"]["image_enabled_stages"].append("reshade")
+            preset["settings"]["reshade_image_shader_search_paths"] = "C:/custom/shaders"
+            preset["settings"]["reshade_image_texture_search_paths"] = "C:/custom/textures"
+            original = copy.deepcopy(preset)
+            enriched = engine.with_standard_shaders(preset, pack)
+            self.assertEqual(preset, original)
+            self.assertEqual(enriched["settings"]["reshade_image_shader_search_paths"],
+                             "C:/custom/shaders;" + shaders.resolve().as_posix())
+            self.assertEqual(enriched["settings"]["reshade_image_texture_search_paths"],
+                             "C:/custom/textures;" + textures.resolve().as_posix())
+            self.assertEqual(engine.with_standard_shaders(enriched, pack), enriched)
+            preset["settings"]["image_enabled_stages"].remove("reshade")
+            self.assertIs(engine.with_standard_shaders(preset, pack), preset)
 
     def test_shared_lock_is_not_reacquired_when_current_thread_owns_it(self):
         class Lock:
