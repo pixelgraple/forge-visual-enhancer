@@ -15,7 +15,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from forge_visual_enhancer import engine
+from forge_visual_enhancer import attribution, engine
 
 ARGS = (True, "Style 1", .55, 3, .7, .7, .7, True, False, "DLAA", "Default",
         False, "2x", True, "AMD CAS", 50, False, 20, 1.)
@@ -29,11 +29,15 @@ def load_script():
     shared = types.ModuleType("modules.shared")
     shared.state = types.SimpleNamespace(interrupted=False)
     shared.sd_model = types.SimpleNamespace(is_wan=False)
-    modules.scripts, modules.shared = scripts, shared
+    shared.opts = types.SimpleNamespace(enable_pnginfo=True, samples_format="png", grid_save=True, grid_format="jpg")
+    callbacks = types.ModuleType("modules.script_callbacks")
+    callbacks.on_before_image_saved = lambda callback: None
+    modules.scripts, modules.shared, modules.script_callbacks = scripts, shared, callbacks
     call_queue = types.ModuleType("modules.call_queue")
     call_queue.queue_lock = types.SimpleNamespace()
     fake = {"modules": modules, "modules.scripts": scripts,
-            "modules.shared": shared, "modules.call_queue": call_queue}
+            "modules.shared": shared, "modules.call_queue": call_queue,
+            "modules.script_callbacks": callbacks}
     spec = importlib.util.spec_from_file_location("test_forge_ve_script", ROOT / "scripts" / "visual_enhancer.py")
     mod = importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules, fake):
@@ -106,8 +110,8 @@ class IntegrationTests(unittest.TestCase):
         self.mod, self.fake = load_script()
         self.script = self.mod.Script()
         self.image = Image.new("RGB", (64, 64), "blue")
-        self.p = types.SimpleNamespace(comments={}, extra_generation_params={}, batch_size=1)
-        self.pp = types.SimpleNamespace(image=self.image)
+        self.p = types.SimpleNamespace(comments={}, extra_generation_params={}, batch_size=1, iteration=0)
+        self.pp = types.SimpleNamespace(image=self.image, index=0)
 
     def test_gradio_panel_builds_in_both_tabs(self):
         for tab in (False, True):
@@ -123,8 +127,58 @@ class IntegrationTests(unittest.TestCase):
             self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
             self.assertEqual(self.pp.image.getpixel((0, 0)), (255, 0, 0))
             self.assertIn("Visual Enhancer", self.p.extra_generation_params)
+            self.assertEqual(self.pp.image.info[attribution.FIELD], attribution.CREDIT)
+            info = self.p.extra_generation_params["Visual Enhancer"]
+            self.assertIn(attribution.CREDIT, info(p=self.p, index=0))
+            self.assertIn(attribution.CREDIT, info(p=self.p, index=0, use_main_prompt=True))
+            self.assertIn(attribution.CREDIT, json.dumps(self.p.extra_generation_params))
             self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
             self.assertEqual(render.call_count, 2)
+
+    def test_refuses_uncredited_outputs_before_running_the_enhancer(self):
+        opts = self.fake["modules.shared"].opts
+        for updates in ({"enable_pnginfo": False}, {"samples_format": "heif"}, {"grid_format": "heif"}):
+            with self.subTest(updates=updates), patch.dict(sys.modules, self.fake), patch.object(engine, "render") as render:
+                old = {key: getattr(opts, key) for key in updates}
+                try:
+                    for key, value in updates.items(): setattr(opts, key, value)
+                    self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
+                    render.assert_not_called()
+                    self.assertIs(self.pp.image, self.image)
+                    self.assertTrue(self.p.comments)
+                finally:
+                    for key, value in old.items(): setattr(opts, key, value)
+
+    def test_partial_batch_credits_successes_and_grid_not_failed_images(self):
+        self.p.batch_size = 2
+        self.pp.index = 0
+        with patch.dict(sys.modules, self.fake), patch.object(engine, "render", side_effect=[Image.new("RGB", (64, 64), "red"), RuntimeError("test failure")]):
+            self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
+            successful = self.pp.image
+            self.pp = types.SimpleNamespace(image=self.image, index=1)
+            self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
+        credit = self.p.extra_generation_params["Visual Enhancer"]
+        self.assertIn(attribution.CREDIT, credit(p=self.p, index=0))
+        self.assertIsNone(credit(p=self.p, index=1))
+        self.assertIn(attribution.CREDIT, credit(p=self.p, index=0, use_main_prompt=True))
+        self.assertIs(self.pp.image, self.image)
+        params = types.SimpleNamespace(image=successful, pnginfo={"parameters": "original prompt"})
+        attribution.before_image_saved(params)
+        self.assertEqual(params.pnginfo[attribution.FIELD], attribution.CREDIT)
+        self.assertEqual(params.pnginfo["parameters"], "original prompt")
+        params = types.SimpleNamespace(image=self.image, pnginfo={})
+        attribution.before_image_saved(params)
+        self.assertNotIn(attribution.FIELD, params.pnginfo)
+
+    def test_later_batch_uses_global_image_indexes(self):
+        self.p.batch_size = 2
+        self.p.iteration = 1
+        self.pp.index = 2
+        with patch.dict(sys.modules, self.fake), patch.object(engine, "render", return_value=Image.new("RGB", (64, 64), "red")):
+            self.script.postprocess_image_after_composite(self.p, self.pp, True, "Quick settings", "", *ARGS)
+        credit = self.p.extra_generation_params["Visual Enhancer"]
+        self.assertIn(attribution.CREDIT, credit(p=self.p, index=0))
+        self.assertIsNone(credit(p=self.p, index=1))
 
     def test_failure_retains_original_and_reports_it(self):
         with patch.dict(sys.modules, self.fake), patch.object(engine, "render", side_effect=RuntimeError("test failure")):

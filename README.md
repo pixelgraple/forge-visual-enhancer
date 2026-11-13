@@ -1,8 +1,5 @@
 # Visual Enhancer for Forge Neo
 
-This is a private development repository. Do not publish it or redistribute
-Visual Enhancer unless its author has granted the required permission.
-
 This extension adds an optional **Visual Enhancer (DLSS 5)** panel to Forge
 Neo's txt2img and img2img screens. Each enabled still image is processed after
 compositing, before Forge saves and returns it. The original is retained if
@@ -11,10 +8,8 @@ enhancement fails. The extension is disabled by default.
 ## Installation through Forge
 
 In Forge, open **Extensions → Install from URL**, enter the repository address,
-and choose **Install**. Private repositories require an authorized GitHub
-account configured for Git on the installing computer. Apply and restart the
-Forge UI when prompted. Existing generation work should be allowed to finish
-before restarting.
+and choose **Install**. Apply and restart the Forge UI when prompted. Existing
+generation work should be allowed to finish before restarting.
 
 Forge executes this repository's `install.py` after cloning it. Setup reuses a
 complete existing Visual Enhancer installation when one is configured or found
@@ -24,6 +19,29 @@ inside this extension. The download is approximately 904 MB and the extracted
 application needs additional disk space. The download and extraction run in
 the background; the extension panel reports progress and can retry failures.
 No packaged Visual Enhancer binaries or model files are present in this repo.
+
+## Credits and attribution
+
+**Visual Enhancer is created by Merserk.** This extension runs the original
+Visual Enhancer application and does not claim ownership of it. The tested
+v20.0 archive is downloaded directly from Merserk's official release:
+
+- [Official v20.0 release page](https://github.com/Merserk/dlss5-visual-enhancer/releases/tag/v20.0)
+- [Exact application archive used by the installer](https://github.com/Merserk/dlss5-visual-enhancer/releases/download/v20.0/Visual.Enhancer.v20.0.7Zip-Ultra.zip)
+
+Merserk's Visual Enhancer and its third-party components retain their own
+copyright and license terms. This repository contains the Forge integration;
+it does not relicense Visual Enhancer or its dependencies. The application is
+an independent project and is not affiliated with or endorsed by NVIDIA.
+
+Each image successfully processed by this extension receives the Visual
+Enhancer and Merserk credit in its generation metadata. To avoid producing
+enhanced images without that credit, Forge's **Write infotext to metadata of
+generated images** setting must be enabled and image format must be PNG, JPEG,
+or WebP. If saved grids are enabled, their format must also be PNG, JPEG, or
+WebP. If these settings cannot preserve attribution, the extension keeps the
+original image and reports the reason. Private license keys are never added
+to image metadata or this repository.
 
 Setup also downloads the pinned standard ReShade shader collection from its
 official upstream repository, verifies its SHA-256, and keeps its original

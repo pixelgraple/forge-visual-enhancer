@@ -3,12 +3,14 @@ from pathlib import Path
 import sys
 
 import gradio as gr
-from modules import scripts, shared
+from modules import script_callbacks, scripts, shared
 
 EXTENSION_DIR = str(Path(__file__).resolve().parent.parent)
 if EXTENSION_DIR not in sys.path:
     sys.path.insert(0, EXTENSION_DIR)
-from forge_visual_enhancer import bootstrap, engine
+from forge_visual_enhancer import attribution, bootstrap, engine
+
+script_callbacks.on_before_image_saved(attribution.before_image_saved)
 
 
 def _uploaded_preset(data):
@@ -40,6 +42,8 @@ class Script(scripts.Script):
         with gr.Accordion("Visual Enhancer (DLSS 5)", open=False):
             gr.Markdown("Small still-image enhancer · Runs after each finished image, before Forge saves it. "
                         "Needs an installed Visual Enhancer and a compatible GPU. Errors keep the original image.")
+            gr.Markdown("Visual Enhancer by Merserk. Enhanced images include attribution in their metadata. "
+                        "Forge image metadata must be enabled; use PNG, JPEG, or WebP for images and saved grids.")
             setup_status = gr.Markdown(value=bootstrap.setup_message, every=3)
             retry_setup = gr.Button("Retry setup", size="sm", variant="secondary")
             retry_setup.click(bootstrap.start_setup, inputs=None, outputs=setup_status, show_progress="hidden")
@@ -98,8 +102,8 @@ class Script(scripts.Script):
         if getattr(getattr(shared, "sd_model", None), "is_wan", False) and getattr(p, "batch_size", 1) > 1:
             p.comments["Visual Enhancer skipped: video frames are not supported by this still-image extension."] = 1
             return
-        p.extra_generation_params.pop("Visual Enhancer", None)
         try:
+            attribution.require_writable_metadata(shared.opts)
             if mode == "Quick settings":
                 preset = engine.quick_preset(*quick_values)
             elif mode == "Visual Enhancer preset":
@@ -110,8 +114,9 @@ class Script(scripts.Script):
             with engine.gpu_lock_if_needed(queue_lock):
                 enhanced = engine.render(pp.image, preset,
                     interrupted=lambda: bool(getattr(shared.state, "interrupted", False)))
+            index = getattr(pp, "index", getattr(p, "batch_index", 0) + getattr(p, "iteration", 0) * getattr(p, "batch_size", 1))
+            attribution.mark_processed(p, enhanced, index, mode)
             pp.image = enhanced
-            p.extra_generation_params["Visual Enhancer"] = "Applied (" + mode + ")"
         except Exception as exc:
             message = "Visual Enhancer could not process an image; original kept: " + str(exc)
             print("[Forge Visual Enhancer] " + message, flush=True)
